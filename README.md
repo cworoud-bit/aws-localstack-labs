@@ -1,780 +1,290 @@
-# 🛒 Projet Boutique — Architecture Microservices Spring Boot 4
+# aws-localstack-labs
+# Lab 00 — Discover AWS Locally with LocalStack
 
-> Mini-plateforme e-commerce construite avec une architecture microservices : deux services métier, un serveur Eureka, une API Gateway, et une application mobile Flutter/React Native. Orchestration complète via Docker Compose.
-
----
-
-## 📁 Structure du dépôt
-
-```
-/projet-boutique/
-├── produits-service/           # Microservice gestion des produits (port 8091)
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/com/boutique/produits/
-│   │   │   │   ├── controller/
-│   │   │   │   │   ├── ProduitController.java
-│   │   │   │   │   └── CategorieController.java
-│   │   │   │   ├── service/
-│   │   │   │   │   ├── ProduitService.java
-│   │   │   │   │   └── CategorieService.java
-│   │   │   │   ├── repository/
-│   │   │   │   │   ├── ProduitRepository.java
-│   │   │   │   │   └── CategorieRepository.java
-│   │   │   │   └── entity/
-│   │   │   │       ├── Produit.java
-│   │   │   │       └── Categorie.java
-│   │   │   └── resources/
-│   │   │       ├── application.properties
-│   │   │       └── data.sql
-│   │   └── test/
-│   │       └── java/com/boutique/produits/
-│   │           ├── service/ProduitServiceTest.java       # Tests unitaires Mockito
-│   │           └── repository/ProduitRepositoryTest.java # Tests intégration @DataJpaTest
-│   ├── Dockerfile
-│   └── pom.xml
-│
-├── avis-service/               # Microservice gestion des avis (port 8092)
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/com/boutique/avis/
-│   │   │   │   ├── controller/AvisController.java
-│   │   │   │   ├── service/AvisService.java
-│   │   │   │   ├── repository/AvisRepository.java
-│   │   │   │   ├── entity/Avis.java
-│   │   │   │   └── client/ProduitClient.java            # Feign client
-│   │   │   └── resources/
-│   │   │       └── application.properties
-│   │   └── test/
-│   ├── Dockerfile
-│   └── pom.xml
-│
-├── eureka-server/              # Serveur de découverte (port 8761)
-│   ├── src/main/java/com/boutique/eureka/
-│   │   └── EurekaServerApplication.java
-│   ├── src/main/resources/application.properties
-│   ├── Dockerfile
-│   └── pom.xml
-│
-├── api-gateway/                # API Gateway Spring Cloud (port 8090)
-│   ├── src/main/java/com/boutique/gateway/
-│   │   └── ApiGatewayApplication.java
-│   ├── src/main/resources/application.yml
-│   ├── Dockerfile
-│   └── pom.xml
-│
-├── mobile-app/                 # Application mobile (Flutter ou React Native)
-│   ├── lib/                    # Flutter
-│   │   ├── main.dart
-│   │   ├── screens/
-│   │   │   ├── categories_screen.dart
-│   │   │   ├── produits_screen.dart
-│   │   │   └── avis_screen.dart
-│   │   └── services/api_service.dart
-│   └── pubspec.yaml
-│
-├── cypress/                    # Tests E2E (branche version2)
-│   └── e2e/boutique.cy.js
-│
-├── docker-compose.yml          # Orchestration complète
-└── README.md
-```
+> **Série** : Le Café ☕ — AWS Hands-On Labs with LocalStack  
+> **Niveau** : Débutant | **Durée** : ~60 min | **Prérequis** : Docker, Python 3.8+, AWS CLI
 
 ---
 
-## 🌿 Branches Git
+## 🎯 Objectifs atteints
 
-| Branche | Contenu |
-|---------|---------|
-| `version1` | Parties 1 à 4 : microservices, Eureka, Gateway, Docker Compose |
-| `version2` | Parties 5 à 6 : application mobile + tests unitaires, intégration et E2E |
+- [x] Comprendre ce qu'est LocalStack et pourquoi il existe
+- [x] Installer et démarrer LocalStack sur ma machine
+- [x] Configurer l'AWS CLI pour pointer vers LocalStack
+- [x] Interagir avec S3, IAM et SQS entièrement en local
+- [x] Comprendre comment LocalStack s'intègre dans un workflow DevOps
 
 ---
 
-## ⚙️ Configuration Java 25 — Résolution des erreurs Maven
+## ⚙️ Environnement
 
-> ⚠️ Java 25 est une version **preview** — des configurations spéciales sont nécessaires pour que Maven et Spring Boot l'acceptent.
+- **OS** : Windows 11
+- **Shell** : PowerShell (Administrateur)
+- **Docker** : v28.5.1
+- **LocalStack** : v3.0.0 (image Docker)
+- **LocalStack CLI** : v2026.3.0
+- **AWS CLI** : v2.34.51
+- **Python** : 3.13
 
-### Erreurs courantes et solutions
+---
 
-#### ❌ `release version 25 not supported`
-Le plugin `maven-compiler-plugin` est trop ancien. **Solution** : utiliser la version `3.13.0` avec `--enable-preview`.
+## 📦 Part 1 — Installation
 
-#### ❌ `Unsupported class file major version 69`
-Le plugin `spring-boot-maven-plugin` est trop ancien (version 3.2.x). Java 25 = class file version 69. **Solution** : monter Spring Boot à `3.4.5`.
+### Docker
+```powershell
+docker --version
+# Docker version 28.5.1, build e180ab8
 
-### Versions compatibles Java 25
-
-| Composant | Version requise |
-|-----------|----------------|
-| Spring Boot Parent | **3.4.5** |
-| Spring Cloud | **2024.0.1** |
-| maven-compiler-plugin | **3.13.0** |
-| spring-boot-maven-plugin | **3.4.5** |
-| JDK Docker image | `eclipse-temurin:24-jdk-alpine` *(JDK 25 indisponible sur Docker Hub)* |
-
-### Configuration `pom.xml` correcte pour Java 25
-
-Dans **chaque** `pom.xml` des microservices, la section `<parent>` doit être :
-
-```xml
-<parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.4.5</version>
-</parent>
+docker ps
+# Plusieurs conteneurs en cours d'exécution confirmés
 ```
 
-La section `<properties>` :
-
-```xml
-<properties>
-    <java.version>25</java.version>
-    <spring-cloud.version>2024.0.1</spring-cloud.version>
-</properties>
+### LocalStack CLI
+```powershell
+pip install localstack
+localstack --version
+# LocalStack CLI 2026.3.0
 ```
 
-La section `<build>` complète :
-
-```xml
-<build>
-    <plugins>
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <version>3.13.0</version>
-            <configuration>
-                <release>25</release>
-                <compilerArgs>
-                    <arg>--enable-preview</arg>
-                </compilerArgs>
-            </configuration>
-        </plugin>
-        <plugin>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-maven-plugin</artifactId>
-            <version>3.4.5</version>
-            <configuration>
-                <jvmArguments>--enable-preview</jvmArguments>
-                <excludes>
-                    <exclude>
-                        <groupId>org.projectlombok</groupId>
-                        <artifactId>lombok</artifactId>
-                    </exclude>
-                </excludes>
-            </configuration>
-        </plugin>
-    </plugins>
-</build>
+### awscli-local
+```powershell
+pip install awscli-local
+# Installation réussie (awscli-local 0.22.2)
 ```
 
-### Script PowerShell — Mise à jour automatique de tous les pom.xml
+> ⚠️ **Problème rencontré** : `awslocal --version` échouait avec l'erreur :
+> `RuntimeError: Could not determine home directory`  
+> **Cause** : Conflit entre AWS CLI v2 (binaire PyInstaller) et le contexte Administrateur PowerShell.  
+> **Solution** : Utilisation de `aws --endpoint-url=http://localhost:4566` directement à la place de `awslocal`, ce qui est fonctionnellement identique.
+
+---
+
+## 🚀 Part 2 — Démarrage de LocalStack
+
+### Lancement via Docker
+```powershell
+docker run --rm -d -p 4566:4566 --name localstack localstack/localstack:3.0.0
+```
+
+> ⚠️ **Note** : La nouvelle LocalStack CLI (2026.x) requiert un compte payant (`LOCALSTACK_AUTH_TOKEN`).  
+> L'image Docker `localstack/localstack:3.0.0` reste gratuite et suffisante pour ce lab.
+
+### Vérification du conteneur
+```powershell
+docker ps --filter name=localstack
+```
+```
+CONTAINER ID   IMAGE                         STATUS
+6418e8988ca8   localstack/localstack:3.0.0   Up (healthy)   0.0.0.0:4566->4566/tcp
+```
+
+### Health Check
+```powershell
+curl http://localhost:4566/_localstack/health
+```
+```json
+{
+  "services": {
+    "s3": "running",
+    "iam": "running",
+    "sqs": "running",
+    "dynamodb": "available",
+    ...
+  }
+}
+```
+✅ LocalStack opérationnel sur `http://localhost:4566`
+
+---
+
+## 🔑 Part 3 — Configuration AWS CLI
+
+### Création du profil localstack
+```powershell
+aws configure --profile localstack
+```
+```
+AWS Access Key ID:     test
+AWS Secret Access Key: test
+Default region name:   us-east-1
+Default output format: json
+```
+
+### Définir le profil par défaut
+```powershell
+# Sur PowerShell (Windows) — pas "export" comme sur Linux/Mac
+$env:AWS_PROFILE = "localstack"
+echo $env:AWS_PROFILE
+# localstack
+```
+
+> ⚠️ **Différence Windows/Linux** : Sur PowerShell on utilise `$env:VAR = "valeur"` au lieu de `export VAR=valeur`.
+
+---
+
+## 🪣 Part 4 — Ressources AWS en local
+
+### Step 8 — Bucket S3 (Menus de Le Café)
 
 ```powershell
-$base = "C:\Users\cworo\IdeaProjects\projet-boutique"
+# Créer le bucket
+aws --endpoint-url=http://localhost:4566 s3 mb s3://lecafe-menus
 
-Get-ChildItem -Path $base -Name "pom.xml" -Recurse | ForEach-Object {
-    $full = Join-Path $base $_
-    $content = Get-Content $full -Raw
-    $content = $content -replace '<java\.version>\d+</java\.version>', '<java.version>25</java.version>'
-    $content = $content -replace '<spring-cloud\.version>[^<]+</spring-cloud\.version>', '<spring-cloud.version>2024.0.1</spring-cloud.version>'
-    Set-Content $full $content -Encoding UTF8
-    Write-Host "✅ $_ mis à jour" -ForegroundColor Green
+# Vérifier
+aws --endpoint-url=http://localhost:4566 s3 ls
+
+# Uploader un fichier menu
+echo "Espresso: 2.50 | Latte: 3.50 | Croissant: 2.00" > menu.txt
+aws --endpoint-url=http://localhost:4566 s3 cp menu.txt s3://lecafe-menus/menu-paris.txt
+
+# Confirmer l'upload
+aws --endpoint-url=http://localhost:4566 s3 ls s3://lecafe-menus/
+
+# Télécharger pour vérifier
+aws --endpoint-url=http://localhost:4566 s3 cp s3://lecafe-menus/menu-paris.txt menu-downloaded.txt
+```
+
+✅ Bucket `lecafe-menus` créé et fichier uploadé/téléchargé avec succès.
+
+---
+
+### Step 9 — Utilisateur IAM (lecafe-app)
+
+```powershell
+# Créer l'utilisateur
+aws --endpoint-url=http://localhost:4566 iam create-user --user-name lecafe-app
+
+# Lister les utilisateurs
+aws --endpoint-url=http://localhost:4566 iam list-users
+
+# Attacher une policy S3 ReadOnly
+aws --endpoint-url=http://localhost:4566 iam attach-user-policy `
+  --user-name lecafe-app `
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+
+# Vérifier les policies attachées
+aws --endpoint-url=http://localhost:4566 iam list-attached-user-policies --user-name lecafe-app
+```
+
+✅ Utilisateur `lecafe-app` créé avec la politique `AmazonS3ReadOnlyAccess`.
+
+---
+
+### Step 10 — Queue SQS (Traitement des commandes)
+
+```powershell
+# Créer la queue
+aws --endpoint-url=http://localhost:4566 sqs create-queue --queue-name lecafe-orders
+```
+```json
+{
+    "QueueUrl": "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/lecafe-orders"
 }
 ```
 
-### Dockerfiles — utiliser JDK 24 (le plus récent sur Docker Hub)
-
-```dockerfile
-FROM eclipse-temurin:24-jdk-alpine AS builder
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN apk add --no-cache maven && mvn clean package -DskipTests
-
-FROM eclipse-temurin:24-jre-alpine
-WORKDIR /app
-COPY --from=builder /app/target/*.jar app.jar
-EXPOSE 8091
-ENTRYPOINT ["java", "--enable-preview", "-jar", "app.jar"]
-```
-
-### Script PowerShell — Mise à jour automatique de tous les Dockerfiles
-
 ```powershell
-$base = "C:\Users\cworo\IdeaProjects\projet-boutique"
+# Récupérer l'URL
+aws --endpoint-url=http://localhost:4566 sqs get-queue-url --queue-name lecafe-orders
 
-Get-ChildItem -Path $base -Name "Dockerfile" -Recurse | ForEach-Object {
-    $full = Join-Path $base $_
-    $content = Get-Content $full -Raw
-    $content = $content -replace 'eclipse-temurin:21-jdk-alpine', 'eclipse-temurin:24-jdk-alpine'
-    $content = $content -replace 'eclipse-temurin:21-jre-alpine', 'eclipse-temurin:24-jre-alpine'
-    $content = $content -replace 'ENTRYPOINT \["java", "-jar"', 'ENTRYPOINT ["java", "--enable-preview", "-jar"'
-    Set-Content $full $content -Encoding UTF8
-    Write-Host "✅ $_ corrigé" -ForegroundColor Green
+# Envoyer un message (commande café)
+aws --endpoint-url=http://localhost:4566 sqs send-message `
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/lecafe-orders `
+  --message-body '{"item": "Latte", "size": "large", "table": 7}'
+```
+```json
+{
+    "MD5OfMessageBody": "4b52e0224c62fc65e9a5cea9703b3746",
+    "MessageId": "827427c1-e45e-43f7-8cce-93c3c5da6400"
 }
 ```
 
-### Ajouter le pom.xml parent (pour que IntelliJ voit tous les modules)
+```powershell
+# Lire le message (simulation cuisine)
+aws --endpoint-url=http://localhost:4566 sqs receive-message `
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/lecafe-orders
+```
+```json
+{
+    "Messages": [{
+        "MessageId": "827427c1-e45e-43f7-8cce-93c3c5da6400",
+        "ReceiptHandle": "YmMzZmRkZTIt...",
+        "Body": "{item: Latte, size: large, table: 7}"
+    }]
+}
+```
 
-Créer `pom.xml` à la racine du projet :
+✅ Queue créée, message envoyé et reçu avec `ReceiptHandle`.
+
+> ⚠️ **Différence PowerShell** : Les guillemets `"..."` causent des erreurs d'échappement.  
+> **Solution** : Utiliser des guillemets simples `'...'` pour le `--message-body` sur PowerShell.
+
+---
+
+## 🔍 Part 5 — Inspection de LocalStack
+
+### Step 11 — Swagger UI
+Ouvert dans le navigateur : `http://localhost:4566/_localstack/swagger`  
+✅ Documentation complète de tous les endpoints LocalStack visible.
+
+### Step 12 — Logs
+```powershell
+localstack logs
+```
+✅ Tous les appels API (HTTP method, path, status code) visibles dans les logs.
+
+---
+
+## 🧹 Cleanup
 
 ```powershell
-$content = '<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.boutique</groupId>
-    <artifactId>projet-boutique</artifactId>
-    <version>1.0.0</version>
-    <packaging>pom</packaging>
-    <name>projet-boutique</name>
-    <modules>
-        <module>eureka-server</module>
-        <module>api-gateway</module>
-        <module>produits-service</module>
-        <module>avis-service</module>
-    </modules>
-</project>'
+docker stop localstack
 
-[System.IO.File]::WriteAllText("C:\chemin\vers\projet-boutique\pom.xml", $content, [System.Text.Encoding]::UTF8)
+docker ps --filter name=localstack
+# Liste vide — conteneur arrêté
 ```
 
-Puis dans IntelliJ : **File → Open** → sélectionner ce `pom.xml` → **Open as Project**.
+✅ LocalStack arrêté, toutes les ressources supprimées (stateless par défaut).
 
 ---
 
-## 🛠️ Prérequis
+## ⚠️ Problèmes rencontrés et solutions
 
-Avant de lancer le projet, assurez-vous d'avoir installé :
-
-| Outil | Version minimale | Vérification |
-|-------|-----------------|--------------|
-| Docker | 24+ | `docker --version` |
-| Docker Compose | 2.20+ | `docker compose version` |
-| Java / JDK | 25 | `java --version` |
-| Maven | 3.9+ | `mvn --version` |
-| Flutter *(mobile)* | 3.x | `flutter --version` |
-| Node.js *(tests E2E)* | 18+ | `node --version` |
-| Cypress *(tests E2E)* | 13+ | `npx cypress --version` |
-
----
-
-## 🚀 Lancement du projet
-
-### Option 1 — Démarrage complet via Docker Compose *(recommandé)*
-
-```bash
-# 1. Cloner le dépôt
-git clone https://github.com/<votre-username>/projet-boutique.git
-cd projet-boutique
-
-# 2. Basculer sur la branche souhaitée
-git checkout version1   # ou version2
-
-# 3. Construire et démarrer tous les services
-docker compose up --build -d
-
-# 4. Vérifier que tous les conteneurs sont actifs
-docker compose ps
-```
-
-> ⏳ **Patience** : le démarrage complet peut prendre 2–3 minutes, le temps qu'Eureka soit prêt et que les microservices s'y enregistrent.
-
-**Vérification rapide :**
-
-```bash
-# Eureka Dashboard
-curl http://localhost:8761
-
-# API Gateway — liste des produits
-curl http://localhost:8090/api/produits
-
-# API Gateway — liste des catégories
-curl http://localhost:8090/api/categories
-
-# API Gateway — avis du produit 1
-curl http://localhost:8090/api/avis/1
-```
-
-### Option 2 — Démarrage en mode développement (sans Docker)
-
-> Requiert PostgreSQL et Redis en local ou via Docker séparément.
-
-```bash
-# Démarrer les dépendances uniquement
-docker compose up -d postgres redis
-
-# eureka-server
-cd eureka-server
-mvn spring-boot:run
-
-# produits-service (dans un nouveau terminal)
-cd produits-service
-mvn spring-boot:run
-
-# avis-service (dans un nouveau terminal)
-cd avis-service
-mvn spring-boot:run
-
-# api-gateway (dans un nouveau terminal)
-cd api-gateway
-mvn spring-boot:run
-```
+| Problème | Cause | Solution |
+|----------|-------|----------|
+| `awslocal` non reconnu | Pas encore installé | `pip install awscli-local` |
+| `RuntimeError: Could not determine home directory` | AWS CLI v2 + contexte Admin PowerShell | Utiliser `aws --endpoint-url=http://localhost:4566` |
+| `export` non reconnu | Commande Linux/Mac | Utiliser `$env:AWS_PROFILE = "localstack"` sur PowerShell |
+| `python3` non reconnu | Windows utilise `python` | Utiliser `python -m json.tool` |
+| `awslocal` cherche mauvais chemin `nektos.act` | Mauvaise installation AWS CLI | Réinstaller AWS CLI v2 via MSI officiel |
+| `localstack start -d` demande auth token | LocalStack CLI 2026.x payant | Lancer via `docker run localstack/localstack:3.0.0` |
+| Guillemets `\"` dans PowerShell | Échappement différent | Utiliser guillemets simples `'...'` |
+| `localstack stop` : container `localstack-main` introuvable | Nom du conteneur différent | Utiliser `docker stop localstack` |
 
 ---
 
-## 🌐 URLs et points d'accès
+## 🤔 Réponses aux questions de réflexion
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| API Gateway | `http://localhost:8090` | Point d'entrée unique |
-| produits-service | `http://localhost:8091` | Accès direct (dev) |
-| avis-service | `http://localhost:8092` | Accès direct (dev) |
-| Eureka Dashboard | `http://localhost:8761` | Tableau de bord de découverte |
-| Swagger produits | `http://localhost:8091/swagger-ui.html` | Documentation API produits |
-| Swagger avis | `http://localhost:8092/swagger-ui.html` | Documentation API avis |
+**1. Ephémère vs persistant (volume-mounted) ?**  
+Le stockage éphémère (par défaut) est idéal pour les tests isolés — chaque session repart de zéro, sans pollution entre développeurs. Le stockage persistant (volume Docker) est utile quand l'équipe veut partager un état commun ou éviter de recréer des ressources à chaque démarrage. En CI/CD, l'éphémère est préférable pour garantir la reproductibilité.
 
----
+**2. Risque d'exécuter `aws` contre le vrai AWS ?**  
+Un développeur pourrait accidentellement créer/supprimer des ressources réelles et générer des coûts ou des incidents. Solution : utiliser des profils AWS distincts (`--profile localstack` vs `--profile prod`), définir `AWS_PROFILE=localstack` dans le `.env` du projet, et configurer des alertes de budget sur le compte AWS réel.
 
-## 📡 Référence des API
-
-### produits-service (via Gateway : `http://localhost:8090`)
-
-| Méthode | Endpoint | Description | Cache Redis |
-|---------|----------|-------------|-------------|
-| `GET` | `/api/produits` | Liste tous les produits | ✅ `@Cacheable` |
-| `GET` | `/api/produits?categorieId={id}` | Produits d'une catégorie | — |
-| `GET` | `/api/produits/{id}` | Détail d'un produit | — |
-| `POST` | `/api/produits` | Créer un produit | ✅ `@CacheEvict` |
-| `GET` | `/api/categories` | Liste toutes les catégories | — |
-| `GET` | `/api/categories/{id}` | Détail d'une catégorie | — |
-
-**Exemple — Créer un produit :**
-```bash
-curl -X POST http://localhost:8090/api/produits \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nom": "Laptop Pro",
-    "prix": 1299.99,
-    "stock": 10,
-    "categorie": { "id": 1 }
-  }'
-```
-
-### avis-service (via Gateway : `http://localhost:8090`)
-
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| `GET` | `/api/avis/{produitId}` | Liste les avis d'un produit |
-| `POST` | `/api/avis` | Soumettre un avis (note 1–5) |
-
-**Exemple — Soumettre un avis :**
-```bash
-curl -X POST http://localhost:8090/api/avis \
-  -H "Content-Type: application/json" \
-  -d '{
-    "produitId": 1,
-    "auteur": "Alice",
-    "commentaire": "Excellent produit !",
-    "note": 5
-  }'
-```
-
-> ⚠️ Si `produitId` n'existe pas dans `produits-service`, `avis-service` retourne une erreur `404 Not Found` via le client Feign.
+**3. Pourquoi `ReceiptHandle` plutôt que `MessageId` pour supprimer ?**  
+Le `ReceiptHandle` est unique par tentative de réception, pas par message. Dans un système distribué, plusieurs consommateurs peuvent recevoir le même message simultanément (before timeout). Le `ReceiptHandle` garantit que seul le consommateur qui a effectivement traité le message peut le supprimer, évitant les suppressions prématurées par d'autres instances.
 
 ---
 
-## 🏗️ Architecture technique
-
-```
-                        ┌─────────────────┐
-                        │   API Gateway   │  :8090
-                        │ Spring Cloud GW │
-                        └────────┬────────┘
-                                 │ Route selon le path
-              ┌──────────────────┼──────────────────┐
-              │                  │                  │
-    /api/produits/**    /api/categories/**    /api/avis/**
-              │                  │                  │
-    ┌─────────▼──────────────────▼┐    ┌────────────▼─────────┐
-    │      produits-service        │    │      avis-service     │
-    │          :8091               │    │         :8092         │
-    │  Controller / Service /      │    │  Controller / Service │
-    │  Repository / Entity         │◄───┤  Feign Client         │
-    │  Cache Redis (@Cacheable)    │    │  Repository / Entity  │
-    └──────────────┬───────────────┘    └──────────┬────────────┘
-                   │                               │
-         ┌─────────▼─────┐                ┌────────▼──────┐
-         │  PostgreSQL DB │                │ PostgreSQL DB │
-         │  (produits)    │                │   (avis)      │
-         └───────────────┘                └───────────────┘
-                   │                               │
-         ┌─────────▼─────┐
-         │  Redis Cache   │
-         └───────────────┘
-
-                    Tous enregistrés dans :
-                   ┌─────────────────┐
-                   │  Eureka Server  │  :8761
-                   │  @EnableEureka  │
-                   └─────────────────┘
-```
-
-### Flux Feign (avis-service → produits-service)
-
-Avant d'enregistrer un avis, `avis-service` vérifie l'existence du produit via un `@FeignClient` :
-
-```
-POST /api/avis
-    └─► AvisService.creerAvis()
-            └─► ProduitClient.getProduit(produitId)   ← Feign → produits-service
-                    ├─ 200 OK  → avis enregistré ✅
-                    └─ 404     → exception levée → 404 retourné au client ❌
-```
-
----
-
-## 🗄️ Données initiales (`data.sql`)
-
-Au démarrage de `produits-service`, les données suivantes sont insérées automatiquement :
-
-**3 Catégories :**
-
-| ID | Nom |
-|----|-----|
-| 1 | Informatique |
-| 2 | Électroménager |
-| 3 | Mode |
-
-**5 Produits :**
-
-| ID | Nom | Prix | Stock | Catégorie |
-|----|-----|------|-------|-----------|
-| 1 | Laptop Pro | 1299.99 | 15 | Informatique |
-| 2 | Souris Sans Fil | 29.99 | 100 | Informatique |
-| 3 | Réfrigérateur XL | 799.00 | 8 | Électroménager |
-| 4 | Lave-linge 8kg | 499.00 | 12 | Électroménager |
-| 5 | Veste en Cuir | 189.90 | 25 | Mode |
-
----
-
-## 🐳 Docker Compose — Détail des services
-
-```yaml
-# Extrait illustratif du docker-compose.yml
-services:
-  postgres:
-    image: postgres:16
-    ports: ["5432:5432"]
-
-  redis:
-    image: redis:7
-    ports: ["6379:6379"]
-
-  eureka-server:
-    build: ./eureka-server
-    ports: ["8761:8761"]
-
-  produits-service:
-    build: ./produits-service
-    ports: ["8091:8091"]
-    depends_on: [postgres, redis, eureka-server]
-
-  avis-service:
-    build: ./avis-service
-    ports: ["8092:8092"]
-    depends_on: [postgres, eureka-server]
-
-  api-gateway:
-    build: ./api-gateway
-    ports: ["8090:8090"]
-    depends_on: [eureka-server]
-```
-
-**Arrêter et nettoyer :**
-```bash
-# Arrêter tous les services
-docker compose down
-
-# Arrêter ET supprimer les volumes (reset BDD)
-docker compose down -v
-
-# Voir les logs d'un service
-docker compose logs -f produits-service
-```
-
----
-
-## 📱 Application Mobile
-
-L'application mobile se connecte **exclusivement** à l'API Gateway (`http://<IP_MACHINE>:8090`).
-
-### Parcours utilisateur
-
-```
-Écran 1 — Catégories
-  GET /api/categories
-  └─► Sélection d'une catégorie
-        │
-        ▼
-Écran 2 — Produits de la catégorie
-  GET /api/produits?categorieId={id}
-  └─► Clic sur un produit
-        │
-        ▼
-Écran 3 — Avis du produit
-  GET /api/avis/{produitId}
-```
-
-### Lancer l'application Flutter
-
-```bash
-cd mobile-app
-
-# Installer les dépendances
-flutter pub get
-
-# Configurer l'IP de l'API Gateway
-# Dans lib/services/api_service.dart, modifier :
-# const String baseUrl = 'http://<VOTRE_IP>:8090';
-
-# Lancer sur émulateur ou appareil physique
-flutter run
-
-# Build APK release
-flutter build apk --release
-```
-
-> 💡 Sur Android Emulator, utilisez `http://10.0.2.2:8090` à la place de `localhost`.
-
-### Lancer l'application React Native *(alternative)*
-
-```bash
-cd mobile-app
-
-# Installer les dépendances
-npm install
-
-# iOS
-npx react-native run-ios
-
-# Android
-npx react-native run-android
-```
-
----
-
-## 🧪 Exécuter les tests (branche `version2`)
-
-```bash
-git checkout version2
-```
-
-### 1. Tests unitaires — Mockito (`ProduitServiceTest`)
-
-Testent la logique métier du service en isolation (sans Spring context, sans BDD).
-
-```bash
-cd produits-service
-mvn test -Dtest=ProduitServiceTest
-```
-
-**Ce qui est testé :**
-- `getAllProduits()` → retourne la liste mockée
-- `getProduitById(id)` → retourne le bon produit / lève une exception si introuvable
-- `createProduit(dto)` → appelle bien `repository.save()`
-- Vérification des interactions Mockito (`verify`, `times`)
-
-### 2. Tests d'intégration — `@DataJpaTest` (`ProduitRepositoryTest`)
-
-Testent le repository avec une base H2 en mémoire (ou Testcontainers PostgreSQL).
-
-```bash
-cd produits-service
-mvn test -Dtest=ProduitRepositoryTest
-```
-
-**Ce qui est testé :**
-- `findAll()` → retourne les bons enregistrements
-- `findByCategorieId(id)` → filtre correctement par catégorie
-- `save()` / `findById()` → persistance et récupération
-- Contraintes de validation (stock négatif, prix nul, etc.)
-
-### 3. Lancer tous les tests Spring en une commande
-
-```bash
-cd produits-service
-mvn verify
-```
-
-### 4. Tests E2E — Cypress
-
-Simulent le parcours complet depuis la liste des produits jusqu'aux avis, **via l'API Gateway** avec `cy.request()`.
-
-```bash
-# Prérequis : tous les services Docker doivent être en cours d'exécution
-docker compose up -d
-
-# Installer Cypress
-cd cypress
-npm install
-
-# Lancer en mode headless (CI)
-npx cypress run
-
-# Lancer avec l'interface graphique
-npx cypress open
-```
-
-**Scénarios couverts (`cypress/e2e/boutique.cy.js`) :**
-
-```
-✅ GET /api/produits        → status 200, tableau non vide
-✅ GET /api/produits/{id}   → status 200, champs attendus présents
-✅ GET /api/avis/{produitId}→ status 200, tableau (peut être vide)
-✅ POST /api/avis            → status 201, avis créé avec bonne note
-✅ POST /api/avis (produit inexistant) → status 404
-```
-
----
-
-## 🔍 Vérification du cache Redis
-
-```bash
-# Ouvrir un shell Redis dans le conteneur
-docker exec -it redis redis-cli
-
-# Lister les clés de cache
-KEYS *
-
-# Inspecter le contenu d'une clé
-GET produits::SimpleKey []
-
-# Vider le cache manuellement
-FLUSHALL
-```
-
-**Comportement attendu :**
-- Après `GET /api/produits` : une clé apparaît dans Redis
-- Après `POST /api/produits` : la clé est supprimée (`@CacheEvict`)
-- Second `GET /api/produits` : recréation de la clé
-
----
-
-## ⚙️ Variables d'environnement
-
-Chaque service peut être configuré via variables d'environnement (ou `application.properties`) :
-
-### produits-service
-
-| Variable | Valeur par défaut | Description |
-|----------|-------------------|-------------|
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/produits_db` | URL PostgreSQL |
-| `SPRING_DATASOURCE_USERNAME` | `postgres` | Utilisateur BDD |
-| `SPRING_DATASOURCE_PASSWORD` | `postgres` | Mot de passe BDD |
-| `SPRING_REDIS_HOST` | `redis` | Hôte Redis |
-| `SPRING_REDIS_PORT` | `6379` | Port Redis |
-| `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | `http://eureka-server:8761/eureka` | URL Eureka |
-
-### avis-service
-
-| Variable | Valeur par défaut | Description |
-|----------|-------------------|-------------|
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/avis_db` | URL PostgreSQL |
-| `SPRING_DATASOURCE_USERNAME` | `postgres` | Utilisateur BDD |
-| `SPRING_DATASOURCE_PASSWORD` | `postgres` | Mot de passe BDD |
-| `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` | `http://eureka-server:8761/eureka` | URL Eureka |
-
----
-
-## ❗ Dépannage
-
-### Les microservices ne s'enregistrent pas dans Eureka
-
-```bash
-# Vérifier que eureka-server est bien démarré
-docker compose logs eureka-server
-
-# Attendre 30–60 secondes après le démarrage d'Eureka
-# puis vérifier : http://localhost:8761
-```
-
-### Erreur de connexion à la base de données
-
-```bash
-# Vérifier que PostgreSQL est prêt
-docker compose logs postgres
-
-# Tester la connexion manuellement
-docker exec -it postgres psql -U postgres -c "\l"
-```
-
-### Le cache Redis ne fonctionne pas
-
-```bash
-# Vérifier que Redis est accessible
-docker compose logs redis
-docker exec -it redis redis-cli ping   # doit répondre PONG
-```
-
-### L'API Gateway retourne 503
-
-```bash
-# Vérifier que les services sont bien enregistrés dans Eureka
-curl http://localhost:8761/eureka/apps
-
-# Vérifier les routes configurées
-docker compose logs api-gateway
-```
-
-### Problème de CORS sur l'application mobile
-
-Si l'application mobile rencontre des erreurs CORS, assurez-vous que l'API Gateway autorise les origines cross-domain en ajoutant dans `application.yml` :
-
-```yaml
-spring:
-  cloud:
-    gateway:
-      globalcors:
-        corsConfigurations:
-          '[/**]':
-            allowedOrigins: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
-```
-
----
-
-## 📦 Stack technique
-
-| Couche | Technologie | Version |
-|--------|-------------|---------|
-| Backend | Spring Boot | 4.x |
-| ORM | Spring Data JPA + Hibernate | — |
-| BDD | PostgreSQL | 16 |
-| Cache | Redis + Spring Cache | 7 |
-| Discovery | Netflix Eureka | Spring Cloud |
-| Communication | OpenFeign | Spring Cloud |
-| Gateway | Spring Cloud Gateway | — |
-| Documentation | springdoc-openapi (Swagger UI) | — |
-| Conteneurisation | Docker + Docker Compose | 24+ |
-| Mobile | Flutter (Dart) ou React Native | 3.x / 0.73+ |
-| Tests unitaires | JUnit 5 + Mockito | — |
-| Tests intégration | @DataJpaTest + H2 / Testcontainers | — |
-| Tests E2E | Cypress | 13+ |
-| Build | Maven | 3.9+ |
-| JDK | Java | 25 |
-
----
-
-## 👤 Auteur
-
-Projet réalisé dans le cadre du test pratique **Architecture Microservices Spring Boot 4**.
-
-**Formateur :** Wahid Hamdi
-
----
-
-*Pour toute question, ouvrez une issue sur le dépôt GitHub.*
+## 📋 Référence rapide (Windows PowerShell)
+
+| Tâche | Commande |
+|-------|----------|
+| Démarrer LocalStack | `docker run --rm -d -p 4566:4566 --name localstack localstack/localstack:3.0.0` |
+| Arrêter LocalStack | `docker stop localstack` |
+| Health check | `curl http://localhost:4566/_localstack/health` |
+| Créer bucket S3 | `aws --endpoint-url=http://localhost:4566 s3 mb s3://nom-bucket` |
+| Uploader vers S3 | `aws --endpoint-url=http://localhost:4566 s3 cp fichier.txt s3://bucket/cle` |
+| Créer utilisateur IAM | `aws --endpoint-url=http://localhost:4566 iam create-user --user-name nom` |
+| Créer queue SQS | `aws --endpoint-url=http://localhost:4566 sqs create-queue --queue-name nom` |
+| Envoyer message SQS | `aws --endpoint-url=http://localhost:4566 sqs send-message --queue-url URL --message-body '...'` |
+| Lire message SQS | `aws --endpoint-url=http://localhost:4566 sqs receive-message --queue-url URL` |
