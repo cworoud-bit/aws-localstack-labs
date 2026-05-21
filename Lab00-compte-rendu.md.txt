@@ -1,0 +1,26 @@
+# Lab 00 — Discover AWS Locally with LocalStack
+
+## Ce que j'ai fait
+- Installé LocalStack CLI et Docker
+- Lancé LocalStack en local (port 4566)
+- Configuré AWS CLI avec un profil localstack
+- Créé un bucket S3 : lecafe-menus
+- Créé un utilisateur IAM : lecafe-app
+- Créé une queue SQS : lecafe-orders
+
+## Commandes utilisées
+\```bash
+localstack start -d
+aws configure --profile localstack
+aws --endpoint-url=http://localhost:4566 s3 mb s3://lecafe-menus
+aws --endpoint-url=http://localhost:4566 iam create-user --user-name lecafe-app
+aws --endpoint-url=http://localhost:4566 sqs create-queue --queue-name lecafe-orders
+\```
+
+## Problèmes rencontrés et solutions
+- `awslocal` ne fonctionnait pas → utilisé `aws --endpoint-url` à la place
+- `export` ne marche pas sur PowerShell → utilisé `$env:AWS_PROFILE`
+- `python3` non reconnu → utilisé `python` à la place
+
+## Screenshots
+[Ajoute tes screenshots ici]
